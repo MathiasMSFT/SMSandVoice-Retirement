@@ -1,0 +1,191 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "logicAppName": {
+      "type": "string"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "dcrName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of Data Collection Rule in the same Resource Group of Logic App."
+      }
+    },
+    "graphEndpoint": {
+      "type": "string",
+      "defaultValue": "https://graph.microsoft.com/beta/reports/authenticationMethods/userRegistrationDetails?$top=1000"
+    },
+    "recurrenceFrequency": {
+      "type": "string",
+      "defaultValue": "Day"
+    },
+    "recurrenceInterval": {
+      "type": "int",
+      "defaultValue": 1
+    }
+  },
+  "variables": {
+    "dcrResourceId": "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dcrName'))]",
+    "monitoringMetricsPublisherRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '3913510d-42f4-4e42-8a64-420c390055eb')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('logicAppName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "graphEndpoint": {
+              "type": "string"
+            },
+            "logsIngestionEndpoint": {
+              "type": "string"
+            },
+            "dcrImmutableId": {
+              "type": "string"
+            },
+            "streamName": {
+              "type": "string"
+            },
+            "recurrenceFrequency": {
+              "type": "string"
+            },
+            "recurrenceInterval": {
+              "type": "int"
+            }
+          },
+          "triggers": {
+            "Recurrence": {
+              "type": "Recurrence",
+              "recurrence": {
+                "frequency": "@parameters('recurrenceFrequency')",
+                "interval": "@parameters('recurrenceInterval')"
+              }
+            }
+          },
+          "actions": {
+            "Get_Graph": {
+              "type": "Http",
+              "inputs": {
+                "uri": "@parameters('graphEndpoint')",
+                "method": "GET",
+                "authentication": {
+                  "type": "ManagedServiceIdentity",
+                  "audience": "https://graph.microsoft.com"
+                }
+              },
+              "runAfter": {},
+              "runtimeConfiguration": {
+                "paginationPolicy": {
+                  "minimumItemCount": 100000
+                }
+              }
+            },
+            "Initialize_variable_Logs": {
+              "type": "InitializeVariable",
+              "inputs": {
+                "variables": [
+                  {
+                    "name": "Logs",
+                    "type": "array",
+                    "value": "@coalesce(body('Get_Graph')?['value'], body('Get_Graph')?['Value'], createArray())"
+                  }
+                ]
+              },
+              "runAfter": {
+                "Get_Graph": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "For_each": {
+              "type": "Foreach",
+              "foreach": "@variables('Logs')",
+              "actions": {
+                "Ingest_To_LogAnalytics": {
+                  "type": "Http",
+                  "inputs": {
+                    "uri": "@concat(parameters('logsIngestionEndpoint'), '/dataCollectionRules/', parameters('dcrImmutableId'), '/streams/', parameters('streamName'), '?api-version=2023-01-01')",
+                    "method": "POST",
+                    "headers": {
+                      "Content-Type": "application/json"
+                    },
+                    "body": [
+                      "@addProperty(item(), 'TimeGenerated', utcNow())"
+                    ],
+                    "authentication": {
+                      "type": "ManagedServiceIdentity",
+                      "audience": "https://monitor.azure.com/"
+                    }
+                  }
+                }
+              },
+              "runAfter": {
+                "Initialize_variable_Logs": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {
+          "graphEndpoint": {
+            "value": "[parameters('graphEndpoint')]"
+          },
+          "logsIngestionEndpoint": {
+            "value": "[reference(variables('dcrResourceId'), '2023-03-11').endpoints.logsIngestion]"
+          },
+          "dcrImmutableId": {
+            "value": "[reference(variables('dcrResourceId'), '2023-03-11').immutableId]"
+          },
+          "streamName": {
+            "value": "[first(objectKeys(reference(variables('dcrResourceId'), '2023-03-11').streamDeclarations))]"
+          },
+          "recurrenceFrequency": {
+            "value": "[parameters('recurrenceFrequency')]"
+          },
+          "recurrenceInterval": {
+            "value": "[parameters('recurrenceInterval')]"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(variables('dcrResourceId'), parameters('logicAppName'), variables('monitoringMetricsPublisherRoleDefinitionId'))]",
+      "scope": "[variables('dcrResourceId')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Logic/workflows', parameters('logicAppName'))]"
+      ],
+      "properties": {
+        "roleDefinitionId": "[variables('monitoringMetricsPublisherRoleDefinitionId')]",
+        "principalId": "[reference(resourceId('Microsoft.Logic/workflows', parameters('logicAppName')), '2019-05-01', 'Full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      }
+    }
+  ],
+  "outputs": {
+    "logicAppResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Logic/workflows', parameters('logicAppName'))]"
+    },
+    "logicAppPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('logicAppName')), '2019-05-01', 'Full').identity.principalId]"
+    }
+  }
+}

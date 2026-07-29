@@ -1,0 +1,185 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workspaceResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of Log Analytics workspace."
+      }
+    },
+    "workspaceLocation": {
+      "type": "string",
+      "defaultValue": "eastus2",
+      "allowedValues": [
+        "canadaeast",
+        "canadacentral",
+        "eastus2",
+        "eastus"
+      ],
+      "metadata": {
+        "description": "Region of DCR. Must be identique to Log Analytics workspace."
+      }
+    },
+    "tableBaseName": {
+      "type": "string",
+      "defaultValue": "MfaUserRegistration",
+      "metadata": {
+        "description": "Name of the custom table. The suffixe _CL will be added automatically."
+      }
+    },
+    "dcrName": {
+      "type": "string",
+      "defaultValue": "dcr-mfa-user-registration",
+      "metadata": {
+        "description": "Name of DCR."
+      }
+    },
+    "streamName": {
+      "type": "string",
+      "defaultValue": "MfaUserRegistration",
+      "metadata": {
+        "description": "Name of DCR stream entry."
+      }
+    }
+  },
+  "variables": {
+    "tableName": "[concat(parameters('tableBaseName'), '_CL')]",
+    "customStreamName": "[concat('Custom-', parameters('streamName'))]",
+    "outputStreamName": "[concat('Custom-', variables('tableName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "apiVersion": "2023-03-11",
+      "name": "[parameters('dcrName')]",
+      "location": "[parameters('workspaceLocation')]",
+      "kind": "Direct",
+      "properties": {
+        "streamDeclarations": {
+          "[variables('customStreamName')]": {
+            "columns": [
+              {
+                "name": "TimeGenerated",
+                "type": "datetime"
+              },
+              {
+                "name": "id",
+                "type": "string"
+              },
+              {
+                "name": "userPrincipalName",
+                "type": "string"
+              },
+              {
+                "name": "userDisplayName",
+                "type": "string"
+              },
+              {
+                "name": "userType",
+                "type": "string"
+              },
+              {
+                "name": "isAdmin",
+                "type": "boolean"
+              },
+              {
+                "name": "isMfaCapable",
+                "type": "boolean"
+              },
+              {
+                "name": "isMfaRegistered",
+                "type": "boolean"
+              },
+              {
+                "name": "isPasswordlessCapable",
+                "type": "boolean"
+              },
+              {
+                "name": "isSsprCapable",
+                "type": "boolean"
+              },
+              {
+                "name": "isSsprEnabled",
+                "type": "boolean"
+              },
+              {
+                "name": "isSsprRegistered",
+                "type": "boolean"
+              },
+              {
+                "name": "isSystemPreferredAuthenticationMethodEnabled",
+                "type": "boolean"
+              },
+              {
+                "name": "defaultMfaMethod",
+                "type": "string"
+              },
+              {
+                "name": "userPreferredMethodForSecondaryAuthentication",
+                "type": "string"
+              },
+              {
+                "name": "methodsRegistered",
+                "type": "dynamic"
+              },
+              {
+                "name": "systemPreferredAuthenticationMethods",
+                "type": "dynamic"
+              },
+              {
+                "name": "lastUpdatedDateTime",
+                "type": "datetime"
+              }
+            ]
+          }
+        },
+        "destinations": {
+          "logAnalytics": [
+            {
+              "name": "laDest",
+              "workspaceResourceId": "[parameters('workspaceResourceId')]"
+            }
+          ]
+        },
+        "dataFlows": [
+          {
+            "streams": [
+              "[variables('customStreamName')]"
+            ],
+            "destinations": [
+              "laDest"
+            ],
+            "outputStream": "[variables('outputStreamName')]"
+          }
+        ]
+      }
+    }
+  ],
+  "outputs": {
+    "dcrResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dcrName'))]"
+    },
+    "dcrImmutableId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', parameters('dcrName')), '2023-03-11').immutableId]"
+    },
+    "logsIngestionEndpoint": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', parameters('dcrName')), '2023-03-11').endpoints.logsIngestion]"
+    },
+    "streamName": {
+      "type": "string",
+      "value": "[variables('customStreamName')]"
+    },
+    "tableName": {
+      "type": "string",
+      "value": "[variables('tableName')]"
+    },
+    "outputStream": {
+      "type": "string",
+      "value": "[variables('outputStreamName')]"
+    }
+  }
+}

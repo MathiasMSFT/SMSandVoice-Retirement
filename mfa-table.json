@@ -1,0 +1,115 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workspaceName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of your existing Log Analytics workspace."
+      }
+    },
+    "tableBaseName": {
+      "type": "string",
+      "defaultValue": "MfaUserRegistration",
+      "metadata": {
+        "description": "Name of the custom table. The suffixe _CL will be added automatically."
+      }
+    }
+  },
+  "variables": {
+    "tableName": "[concat(parameters('tableBaseName'), '_CL')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/tables",
+      "apiVersion": "2022-10-01",
+      "name": "[concat(parameters('workspaceName'), '/', variables('tableName'))]",
+      "properties": {
+        "plan": "Analytics",
+        "schema": {
+          "name": "[variables('tableName')]",
+          "columns": [
+            {
+              "name": "TimeGenerated",
+              "type": "datetime"
+            },
+            {
+              "name": "id",
+              "type": "string"
+            },
+            {
+              "name": "userPrincipalName",
+              "type": "string"
+            },
+            {
+              "name": "userDisplayName",
+              "type": "string"
+            },
+            {
+              "name": "userType",
+              "type": "string"
+            },
+            {
+              "name": "isAdmin",
+              "type": "boolean"
+            },
+            {
+              "name": "isMfaCapable",
+              "type": "boolean"
+            },
+            {
+              "name": "isMfaRegistered",
+              "type": "boolean"
+            },
+            {
+              "name": "isPasswordlessCapable",
+              "type": "boolean"
+            },
+            {
+              "name": "isSsprCapable",
+              "type": "boolean"
+            },
+            {
+              "name": "isSsprEnabled",
+              "type": "boolean"
+            },
+            {
+              "name": "isSsprRegistered",
+              "type": "boolean"
+            },
+            {
+              "name": "isSystemPreferredAuthenticationMethodEnabled",
+              "type": "boolean"
+            },
+            {
+              "name": "defaultMfaMethod",
+              "type": "string"
+            },
+            {
+              "name": "userPreferredMethodForSecondaryAuthentication",
+              "type": "string"
+            },
+            {
+              "name": "methodsRegistered",
+              "type": "dynamic"
+            },
+            {
+              "name": "systemPreferredAuthenticationMethods",
+              "type": "dynamic"
+            },
+            {
+              "name": "lastUpdatedDateTime",
+              "type": "datetime"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "tableName": {
+      "type": "string",
+      "value": "[variables('tableName')]"
+    }
+  }
+}
